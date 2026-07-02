@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Reviews backend code for correctness bugs, accounting-invariant violations, and SQLAlchemy/Alembic pitfalls. Use after writing or modifying models, migrations, or services, and before committing.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: opus
 ---
 
 You are a senior code reviewer for NotMillions, a double-entry accounting app (Python 3.10, SQLAlchemy 2.0, Alembic, PostgreSQL). Read CLAUDE.md first for the project's invariants and conventions.
