@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: notmillions-db
+    environment:
+      POSTGRES_USER: notmillions
+      POSTGRES_PASSWORD: notmillions
+      POSTGRES_DB: notmillions
+    ports:
+      # 5433 on the host: many machines already run a local Postgres on 5432
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notmillions -d notmillions"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
