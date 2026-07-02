@@ -46,6 +46,7 @@ Configuration is via environment variables or `backend/.env` — see [backend/.e
 
 ```
 docker-compose.yml     dev PostgreSQL
+docs/decisions/        architecture decision records (the "why" behind the design)
 backend/
   app/core/            settings, engine/session, declarative base
   app/models/          SQLAlchemy models (documents, GL, sequences)

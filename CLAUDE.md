@@ -8,6 +8,8 @@ NotMillions is a self-hosted SME accounting app inspired by "Millions" (SG/MY on
 
 Deployment target is a home-lab Docker Compose stack (TrueNAS), single company, Singapore GST. Keep architecture solo-dev simple — no cloud-native patterns.
 
+Decision rationale lives in `docs/decisions/` (ADRs) — read the relevant record before changing core design; supersede with a new ADR rather than editing old ones.
+
 ## Commands
 
 Backend uses **uv** (not pip/venv directly). All backend commands run from `backend/`:
