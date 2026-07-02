@@ -10,6 +10,16 @@ Deployment target is a home-lab Docker Compose stack (TrueNAS), single company, 
 
 Decision rationale lives in `docs/decisions/` (ADRs) — read the relevant record before changing core design; supersede with a new ADR rather than editing old ones.
 
+## Starting a session
+
+The repo is the only shared memory between sessions (local machine, web, phone). Before doing anything:
+
+1. Read `docs/ROADMAP.md` — the Status block says what's done and what's next; recent `git log --oneline -15` fills in the details.
+2. Check `docs/decisions/` for any design area you're about to touch.
+3. When a phase or significant chunk of work completes, update the Status block in `docs/ROADMAP.md` in the same commit series — the next session depends on it.
+
+Workflow expectations (the user has confirmed these): plan mode for non-trivial work, run the `code-reviewer` agent over new code before committing, fix findings first, split work into logical commits.
+
 ## Commands
 
 Backend uses **uv** (not pip/venv directly). All backend commands run from `backend/`:
