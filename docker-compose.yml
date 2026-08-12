@@ -7,8 +7,7 @@ services:
       POSTGRES_PASSWORD: notmillions
       POSTGRES_DB: notmillions
     ports:
-      # 5433 on the host: many machines already run a local Postgres on 5432
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
