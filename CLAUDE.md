@@ -18,7 +18,7 @@ The repo is the only shared memory between sessions (local machine, web, phone).
 2. Check `docs/decisions/` for any design area you're about to touch.
 3. When a phase or significant chunk of work completes, update the Status block in `docs/ROADMAP.md` in the same commit series — the next session depends on it.
 
-Workflow expectations (the user has confirmed these): plan mode for non-trivial work, run the `code-reviewer` agent over new code before committing, fix findings first, split work into logical commits.
+Workflow expectations (the user has confirmed these): plan mode for non-trivial work, run `/code-review medium` over new code before committing, fix findings first, split work into logical commits.
 
 ## Commands
 
