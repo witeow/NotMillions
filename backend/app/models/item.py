@@ -19,4 +19,5 @@ class Item(TimestampMixin, Base):
     uom: Mapped[str] = mapped_column(String(20), default="unit")
     default_tax_code_id: Mapped[int | None] = mapped_column(ForeignKey("tax_codes.id"))
     income_account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
+    expense_account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
     is_active: Mapped[bool] = mapped_column(default=True)

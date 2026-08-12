@@ -18,12 +18,27 @@ from app.models import (
 
 ACCOUNTS = [
     # (code, name, type, is_system)
+    # Assets
     ("1000", "Cash on Hand", AccountType.ASSET, True),
     ("1100", "Bank", AccountType.ASSET, True),
     ("1200", "Accounts Receivable", AccountType.ASSET, True),
+    ("1300", "GST Input Tax", AccountType.ASSET, True),
+    # Liabilities
+    ("2000", "Accounts Payable", AccountType.LIABILITY, True),
     ("2100", "GST Output Tax", AccountType.LIABILITY, True),
+    # Equity
     ("3000", "Retained Earnings", AccountType.EQUITY, True),
+    # Revenue
     ("4000", "Sales Revenue", AccountType.REVENUE, True),
+    # Direct costs (5000s — COGS for construction)
+    ("5000", "Cost of Materials", AccountType.EXPENSE, False),
+    ("5100", "Subcontractor Costs", AccountType.EXPENSE, False),
+    ("5200", "Equipment Rental", AccountType.EXPENSE, False),
+    # Operating expenses (6000s)
+    ("6000", "Wages & Salaries", AccountType.EXPENSE, False),
+    ("6100", "CPF Contributions", AccountType.EXPENSE, False),
+    ("6200", "Foreign Worker Levy", AccountType.EXPENSE, False),
+    ("6300", "Office Expenses", AccountType.EXPENSE, False),
 ]
 
 SEQUENCES = [
@@ -33,6 +48,9 @@ SEQUENCES = [
     ("PAYMENT", "RCT-"),
     ("CREDIT_NOTE", "CN-"),
     ("JOURNAL", "JE-"),
+    ("BILL", "BILL-"),
+    ("PAYMENT_MADE", "PMT-"),
+    ("DEBIT_NOTE", "DN-"),
 ]
 
 
@@ -52,10 +70,16 @@ def seed(session: Session) -> None:
         get_or_create_account(session, code, name, type_, is_system)
 
     gst_output = session.scalar(select(Account).where(Account.code == "2100"))
+    gst_input = session.scalar(select(Account).where(Account.code == "1300"))
     tax_codes = [
+        # Output tax (sales)
         ("SR", "Standard-Rated (9%)", Decimal("9.00"), gst_output.id),
         ("ZR", "Zero-Rated", Decimal("0.00"), None),
         ("ES", "Exempt Supply", Decimal("0.00"), None),
+        # Input tax (purchases)
+        ("TX", "Standard-Rated Input (9%)", Decimal("9.00"), gst_input.id),
+        ("BL", "Blocked Input Tax", Decimal("0.00"), None),
+        ("NR", "Not Registered", Decimal("0.00"), None),
     ]
     for code, name, rate, account_id in tax_codes:
         if session.scalar(select(TaxCode).where(TaxCode.code == code)) is None:

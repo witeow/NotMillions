@@ -13,6 +13,9 @@ class JournalSourceType(str, enum.Enum):
     INVOICE = "INVOICE"
     PAYMENT = "PAYMENT"
     CREDIT_NOTE = "CREDIT_NOTE"
+    BILL = "BILL"
+    PAYMENT_MADE = "PAYMENT_MADE"
+    DEBIT_NOTE = "DEBIT_NOTE"
     MANUAL = "MANUAL"
 
 
