@@ -1,126 +1,152 @@
-"""End-to-end schema smoke test against the dev database.
+"""End-to-end smoke test against the dev database.
 
-Creates a customer, an item, and a draft invoice with an SR and a ZR line,
-computes totals the way the posting service will, then posts a balanced
-journal entry — proving the schema supports the invoice posting rules.
+AR side: creates a customer, draft invoice with SR + ZR lines, posts it,
+verifies the journal entry balances, receives a payment.
 
-Run with:  python scripts/smoke_test.py   (after `pip install -e .`)
+AP side: creates a supplier, a bill with TX tax code, posts it, verifies
+the journal entry, makes a payment.
+
+Run with:  python scripts/smoke_test.py   (after `uv sync` + seed)
 """
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
 from app.models import (
     Account,
+    BillStatus,
     Customer,
-    Invoice,
-    InvoiceLine,
     InvoiceStatus,
-    Item,
     JournalEntry,
-    JournalLine,
-    JournalSourceType,
+    PaymentMethod,
+    Supplier,
     TaxCode,
     next_document_number,
 )
-
-CENT = Decimal("0.01")
-
-
-def line_amounts(qty: Decimal, unit_price: Decimal, rate: Decimal):
-    subtotal = (qty * unit_price).quantize(CENT, rounding=ROUND_HALF_UP)
-    tax = (subtotal * rate / 100).quantize(CENT, rounding=ROUND_HALF_UP)
-    return subtotal, tax
+from app.services.bill_service import create_bill, post_bill
+from app.services.invoice_service import create_invoice, post_invoice
+from app.services.payment_made_service import create_payment_made
+from app.services.payment_service import create_payment
 
 
 def main() -> None:
     with SessionLocal() as session:
         sr = session.scalar(select(TaxCode).where(TaxCode.code == "SR"))
         zr = session.scalar(select(TaxCode).where(TaxCode.code == "ZR"))
+        tx = session.scalar(select(TaxCode).where(TaxCode.code == "TX"))
         ar = session.scalar(select(Account).where(Account.code == "1200"))
-        gst_output = session.scalar(select(Account).where(Account.code == "2100"))
+        ap = session.scalar(select(Account).where(Account.code == "2000"))
         sales = session.scalar(select(Account).where(Account.code == "4000"))
-        assert sr and zr and ar and gst_output and sales, "Run app.seed first"
+        bank = session.scalar(select(Account).where(Account.code == "1100"))
+        materials = session.scalar(select(Account).where(Account.code == "5000"))
+        assert all([sr, zr, tx, ar, ap, sales, bank, materials]), "Run app.seed first"
 
-        invoice_number = next_document_number(session, "INVOICE")
-        customer = Customer(
-            code=f"CUST-{invoice_number[-4:]}", name="Ah Huat Trading Pte Ltd"
-        )
-        item = Item(
-            code=f"ITEM-{invoice_number[-4:]}",
-            description="Consulting services",
-            unit_price=Decimal("150.0000"),
-            default_tax_code_id=sr.id,
-            income_account_id=sales.id,
-        )
-        session.add_all([customer, item])
+        # Use sequence-derived codes so the smoke test is re-runnable
+        seq_num = next_document_number(session, "INVOICE")[-4:]
+
+        # --- AR: Invoice + Payment ---
+        customer = Customer(code=f"CUST-{seq_num}", name="Ah Huat Trading")
+        session.add(customer)
         session.flush()
 
-        qty1, price1 = Decimal("10"), Decimal("150.0000")
-        sub1, tax1 = line_amounts(qty1, price1, sr.rate)
-        qty2, price2 = Decimal("2"), Decimal("80.0000")
-        sub2, tax2 = line_amounts(qty2, price2, zr.rate)
-
-        subtotal = sub1 + sub2
-        tax_total = tax1 + tax2
-        total = subtotal + tax_total
-
-        invoice = Invoice(
-            number=invoice_number,
+        inv = create_invoice(
+            session,
             customer_id=customer.id,
-            date=date.today(),
+            invoice_date=date.today(),
             due_date=date.today() + timedelta(days=30),
-            status=InvoiceStatus.POSTED,
-            subtotal=subtotal,
-            tax_total=tax_total,
-            total=total,
-            lines=[
-                InvoiceLine(
-                    line_no=1, item_id=item.id, description=item.description,
-                    qty=qty1, unit_price=price1, tax_code_id=sr.id,
-                    tax_amount=tax1, line_total=sub1 + tax1,
-                    income_account_id=sales.id,
-                ),
-                InvoiceLine(
-                    line_no=2, description="Reimbursable disbursements",
-                    qty=qty2, unit_price=price2, tax_code_id=zr.id,
-                    tax_amount=tax2, line_total=sub2 + tax2,
-                    income_account_id=sales.id,
-                ),
+            lines_data=[
+                {
+                    "description": "Consulting services",
+                    "qty": Decimal("10"),
+                    "unit_price": Decimal("150.0000"),
+                    "tax_code_id": sr.id,
+                    "income_account_id": sales.id,
+                },
+                {
+                    "description": "Reimbursable disbursements",
+                    "qty": Decimal("2"),
+                    "unit_price": Decimal("80.0000"),
+                    "tax_code_id": zr.id,
+                    "income_account_id": sales.id,
+                },
             ],
         )
-        session.add(invoice)
-        session.flush()
+        assert inv.subtotal == Decimal("1660.00")
+        assert inv.tax_total == Decimal("135.00")
+        assert inv.total == Decimal("1795.00")
 
-        # Posting rule: DR AR (total) / CR income per line / CR GST output
-        entry = JournalEntry(
-            entry_no=next_document_number(session, "JOURNAL"),
-            date=invoice.date,
-            memo=f"Invoice {invoice.number}",
-            source_type=JournalSourceType.INVOICE,
-            source_id=invoice.id,
-            lines=[
-                JournalLine(account_id=ar.id, debit=total),
-                JournalLine(account_id=sales.id, credit=subtotal),
-                JournalLine(account_id=gst_output.id, credit=tax_total),
-            ],
-        )
-        session.add(entry)
-        session.flush()
-        invoice.journal_entry_id = entry.id
+        post_invoice(session, inv)
+        assert inv.status == InvoiceStatus.POSTED
 
+        entry = session.get(JournalEntry, inv.journal_entry_id)
         debits = sum(l.debit for l in entry.lines)
         credits = sum(l.credit for l in entry.lines)
-        assert debits == credits == total, f"Unbalanced: DR {debits} != CR {credits}"
-        assert subtotal == Decimal("1660.00"), subtotal
-        assert tax_total == Decimal("135.00"), tax_total  # 9% of 1500 only
-        assert total == Decimal("1795.00"), total
+        assert debits == credits == inv.total, f"AR JE unbalanced: DR {debits} != CR {credits}"
+
+        pmt = create_payment(
+            session,
+            customer_id=customer.id,
+            payment_date=date.today(),
+            method=PaymentMethod.PAYNOW,
+            bank_account_id=bank.id,
+            amount=inv.total,
+            allocations=[{"invoice_id": inv.id, "amount": inv.total}],
+            reference="PayNow ref 001",
+        )
+        assert inv.status == InvoiceStatus.PAID
+
+        print(f"AR OK: {inv.number} total={inv.total} -> {pmt.number} (PAID)")
+
+        # --- AP: Bill + Payment Made ---
+        supplier = Supplier(code=f"SUP-{seq_num}", name="Cement Supplier")
+        session.add(supplier)
+        session.flush()
+
+        bill = create_bill(
+            session,
+            supplier_id=supplier.id,
+            bill_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            lines_data=[
+                {
+                    "description": "Portland cement 50kg bags",
+                    "qty": Decimal("100"),
+                    "unit_price": Decimal("5.0000"),
+                    "tax_code_id": tx.id,
+                    "expense_account_id": materials.id,
+                },
+            ],
+        )
+        assert bill.subtotal == Decimal("500.00")
+        assert bill.tax_total == Decimal("45.00")
+        assert bill.total == Decimal("545.00")
+
+        post_bill(session, bill)
+        assert bill.status == BillStatus.POSTED
+
+        entry = session.get(JournalEntry, bill.journal_entry_id)
+        debits = sum(l.debit for l in entry.lines)
+        credits = sum(l.credit for l in entry.lines)
+        assert debits == credits == bill.total, f"AP JE unbalanced: DR {debits} != CR {credits}"
+
+        pmt_made = create_payment_made(
+            session,
+            supplier_id=supplier.id,
+            payment_date=date.today(),
+            method=PaymentMethod.PAYNOW,
+            bank_account_id=bank.id,
+            amount=bill.total,
+            allocations=[{"bill_id": bill.id, "amount": bill.total}],
+            reference="PayNow ref 002",
+        )
+        assert bill.status == BillStatus.PAID
+
+        print(f"AP OK: {bill.number} total={bill.total} -> {pmt_made.number} (PAID)")
 
         session.commit()
-        print(f"OK: {invoice.number} total={total} posted as {entry.entry_no} "
-              f"(DR {debits} = CR {credits})")
+        print("Smoke test passed.")
 
 
 if __name__ == "__main__":

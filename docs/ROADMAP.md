@@ -4,39 +4,40 @@ The build order for NotMillions. **This file is the hand-off between working ses
 
 ## Status
 
-- **Last updated:** 2026-07-03
-- **Done:** Phase 1 — full sales-side schema, verified migration, seed, smoke test (see below)
-- **Next up:** Phase 2 — posting service, then FastAPI routes
-- **Environment quick-start:** `docker compose up -d` (repo root), then from `backend/`: `uv sync`, `uv run alembic upgrade head`, `uv run python -m app.seed`. Sanity check: `uv run python scripts/smoke_test.py` and `uv run alembic check`.
+- **Last updated:** 2026-08-12
+- **Done:** Phase 1, Phase 2a (posting services + tests for both AR and AP — 45 tests passing)
+- **Next up:** Phase 2b — FastAPI routes (CRUD + document lifecycle endpoints, Swagger UI as interim UI)
+- **Environment quick-start:** `docker compose up -d` (repo root), then from `backend/`: `uv sync --all-extras`, `uv run alembic upgrade head`, `uv run python -m app.seed`. Sanity check: `uv run pytest` and `uv run python scripts/smoke_test.py`.
 
 ## Phase 1 — Data foundation ✅ (2026-07-03)
 
 SQLAlchemy 2.0 models for 16 tables (documents, allocations, double-entry ledger, sequences), Alembic initial migration, idempotent seed (SG chart of accounts, GST tax codes SR/ZR/ES, document sequences, company row), end-to-end smoke test posting a balanced journal entry. Design rationale: `docs/decisions/` (11 ADRs).
 
-## Phase 2 — Posting service + API (next)
+## Phase 2a — Posting services + tests ✅ (2026-08-12)
 
-The business-logic layer, then HTTP on top:
+Scope expanded from sales-only to both AR and AP (ADR 0013). Includes:
 
-1. **Posting service** — the single choke point that writes journal rows:
-   - Invoice posting (DR AR / CR income per line / CR GST output), payment posting (DR bank / CR AR), credit-note posting (DR income + GST / CR AR)
-   - Debits = credits asserted on every entry; document numbers via the row-locked sequence helper, inside the saving transaction
-   - Status transitions (DRAFT→POSTED→PARTIALLY_PAID→PAID; VOID posts a reversing entry, never deletes)
-   - Allocation rules: sum of a payment's allocations ≤ payment amount; allocations only against POSTED invoices of the same customer
-   - Tests for every rule above (first real test suite; pytest)
-2. **FastAPI routes** — CRUD for customers/items/tax codes, document endpoints (create draft, edit draft, post, void, allocate), wired through the service layer only. Swagger UI (`/docs`) serves as the interim UI for demoing.
+- **AP models**: Supplier, Bill/BillLine, PaymentMade/PaymentMadeAllocation, DebitNote/DebitNoteLine/DebitNoteAllocation (8 new tables). Item gained `expense_account_id`.
+- **Expanded seed**: AP account (2000), GST Input Tax (1300), expense accounts (5000–6300 for construction: materials, subcontractor, equipment, wages, CPF, levy, office), input tax codes (TX/BL/NR per IRAS), AP document sequences.
+- **Service layer** (`app/services/`): shared helpers (balanced JE creation, reversals, line totals), then per-document services for invoice, payment, credit note (AR) and bill, payment made, debit note (AP). All posting rules, status transitions, and allocation validations.
+- **45 pytest tests** covering every posting rule, allocation constraint, status transition, and void/reversal path.
+
+## Phase 2b — FastAPI routes (next)
+
+CRUD for customers/suppliers/items/tax codes/accounts, document endpoints (create draft, edit draft, post, void, allocate) for all 6 document types, wired through the service layer only. Swagger UI (`/docs`) serves as the interim UI.
 
 ## Phase 3 — Reports
 
-All queries over the ledger + allocations (no new write paths): AR aging, customer statements, trial balance, P&L, balance sheet. GST summary (output tax by period) to help with F5 filing.
+All queries over the ledger + allocations (no new write paths): AR aging, AP aging, customer/supplier statements, trial balance, P&L (with gross profit from 5000s vs 6000s split), balance sheet. GST F5 summary (output tax SR/ZR/ES vs input tax TX/BL/NR by period).
 
 ## Phase 4 — Frontend (learning track)
 
-React + TypeScript, built deliberately as a learning exercise (explain concepts as they come up). Screens in value order: invoice entry, customer list + statement view, payment entry with allocation, dashboards last.
+React + TypeScript, built deliberately as a learning exercise (explain concepts as they come up). Screens in value order: invoice entry, bill entry, customer/supplier lists, payment entry with allocation, dashboards last.
 
 ## Phase 5 — Deployment
 
 Docker Compose bundle for TrueNAS: backend container + Postgres + volume, `.env`-driven secrets, backup/restore procedure for the database. The "one-time install" promise made real.
 
-## Deferred (per ADR 0001)
+## Deferred
 
-Purchases/AP, inventory, bank reconciliation, payroll, multi-currency, LHDN e-invoicing. Revisit only after Phases 2–5 hold up in real use.
+Inventory, bank reconciliation, payroll, multi-currency, LHDN e-invoicing. Revisit only after Phases 2–5 hold up in real use.
