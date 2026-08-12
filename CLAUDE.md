@@ -25,7 +25,7 @@ Workflow expectations (the user has confirmed these): plan mode for non-trivial 
 Backend uses **uv** (not pip/venv directly). All backend commands run from `backend/`:
 
 ```
-docker compose up -d              # from repo root: dev Postgres 16 on host port 5433
+docker compose up -d              # from repo root: dev Postgres 16 on host port 5432
 uv sync                           # install deps + editable app package into .venv
 uv run alembic upgrade head       # apply migrations
 uv run alembic revision --autogenerate -m "..."   # new migration (review before applying)
@@ -33,7 +33,7 @@ uv run python -m app.seed         # idempotent: chart of accounts, tax codes, se
 uv run python scripts/smoke_test.py   # end-to-end schema check (invoice + balanced JE)
 ```
 
-Port gotcha: this machine runs a local PostgreSQL on 5432, so the dev container maps to **5433**. `DATABASE_URL` (env or `backend/.env`, see `.env.example`) must use 5433.
+The dev container maps to the standard port **5432**. `DATABASE_URL` (env or `backend/.env`, see `.env.example`) uses 5432. If your machine already runs a local PostgreSQL on 5432, change the host mapping in `docker-compose.yml` and `DATABASE_URL` accordingly.
 
 There is no test suite, linter, or FastAPI app yet (routes are the next phase).
 
@@ -54,7 +54,7 @@ Double-entry accounting core. The invariants that matter:
 ### Conventions
 
 - SQLAlchemy 2.0 style (`Mapped[]`/`mapped_column`). Money columns use the shared constants in `app/models/base.py`: `MONEY` Numeric(12,2), `UNIT_PRICE` Numeric(12,4), `QUANTITY` Numeric(12,3). Line math rounds half-up to cents per line (see `scripts/smoke_test.py`).
-- Enums are Python `(str, enum.Enum)` classes stored as strings (`sa.Enum(..., native_enum=False)`) — never Postgres native enums (migration pain). Note: Python is 3.10, so no `StrEnum`.
+- Enums are Python `(str, enum.Enum)` classes stored as strings (`sa.Enum(..., native_enum=False)`) — never Postgres native enums (migration pain).
 - Constraint names come from the naming convention on `Base.metadata` (`app/core/db.py`) — don't name constraints ad hoc.
 - **Every new model must be imported in `app/models/__init__.py`**, otherwise Alembic autogenerate silently misses its table.
 - Tax codes (SR 9%, ZR, ES) live in the `tax_codes` table — GST rate changes are data edits, never hardcoded in logic.
