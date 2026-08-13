@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Reviews backend code for correctness bugs, accounting-invariant violations, and SQLAlchemy/Alembic pitfalls. Use after writing or modifying models, migrations, or services, and before committing.
 tools: Read, Grep, Glob, Bash
-model: claude-opus-4-6
+model: claude-opus-4-7
 thinking: medium
 ---
 
